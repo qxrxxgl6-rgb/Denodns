@@ -150,13 +150,13 @@ export function maxDohUrl() {
 export function dohResolvers() {
   if (!envManager) return null;
 
-  if (isWorkers()) {
-    // upstream to two resolvers on workers; since egress is free,
-    // faster among the 2 should help lower tail latencies at zero-cost
-    return [primaryDohResolver(), secondaryDohResolver()];
+  const p = primaryDohResolver();
+  const s = secondaryDohResolver();
+  if (s) {
+    return [p, s];
   }
 
-  return [primaryDohResolver()];
+  return [p];
 }
 
 export function geoipUrl() {

@@ -29,6 +29,53 @@ export function makeTransport(host, port = 53, opts = {}) {
   return new Transport(host, port, opts);
 }
 
+export function makeMultiTransport(hosts, port = 53, opts = {}) {
+  const transports = hosts.map((h) => new Transport(h, port, opts));
+  return new MultiTransport(transports);
+}
+
+export class MultiTransport {
+  constructor(transports) {
+    this.transports = transports;
+    this.log = log.withTags("MultiTransport");
+  }
+
+  async teardown() {
+    await Promise.allSettled(this.transports.map((t) => t.teardown()));
+  }
+
+  async udpquery(rxid, q) {
+    try {
+      return await Promise.any(
+        this.transports.map(async (t) => {
+          const ans = await t.udpquery(rxid, q);
+          if (!ans || ans.length === 0) throw new Error("empty response");
+          return ans;
+        })
+      );
+    } catch (err) {
+      this.log.w(rxid, "all udp transports failed, err:", err.message);
+      return null;
+    }
+  }
+
+  async tcpquery(rxid, q) {
+    try {
+      return await Promise.any(
+        this.transports.map(async (t) => {
+          const ans = await t.tcpquery(rxid, q);
+          if (!ans || ans.length === 0) throw new Error("empty response");
+          return ans;
+        })
+      );
+    } catch (err) {
+      this.log.w(rxid, "all tcp transports failed, err:", err.message);
+      return null;
+    }
+  }
+}
+
+
 // Transport upstreams plain-old DNS queries over both UDPv4 and TCPv4.
 // Host and port constructor parameters are IPv4 addresses of the upstream.
 // TCP and UDP connections are pooled for reuse, but DNS queries are not

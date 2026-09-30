@@ -118,14 +118,18 @@ async function prep() {
     log.i("no atob/btoa polyfill required");
   }
 
-  // TODO: move dns* related settings to env
-  // flydns is always ipv6 (fdaa::53)
-  const plainOldDnsIp = onFly ? "fdaa::3" : "1.1.1.2";
-  const dns53 = dnst.makeTransport(plainOldDnsIp);
-  log.i("imported udp/tcp dns transport", plainOldDnsIp);
+  // Multi-upstream Anycast DNS: Cloudflare + Google + Fly internal fallback
+  const customUpstreams = process.env.DNS_UPSTREAM_IPS;
+  const upstreamList = customUpstreams
+    ? customUpstreams.split(",").map((s) => s.trim()).filter(Boolean)
+    : ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111", "2001:4860:4860::8888", "fdaa::3"];
+
+  const dns53 = dnst.makeMultiTransport(upstreamList);
+  log.i("imported ultra-fast multi-transport dns upstreams:", upstreamList.join(", "));
 
   // signal ready
   system.pub("ready", [dns53]);
+
 }
 
 /**

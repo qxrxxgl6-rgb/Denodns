@@ -1,10 +1,13 @@
 FROM node:25 as setup
-# git is required if any of the npm packages are git[hub] packages
-RUN apt-get update && apt-get install git -yq --no-install-suggests --no-install-recommends
+# git and wget are required
+RUN apt-get update && apt-get install git wget -yq --no-install-suggests --no-install-recommends
 WORKDIR /app
 COPY . .
+# fix line endings and permissions for pre.sh
+RUN chmod +x ./src/build/pre.sh && sed -i 's/\r$//' ./src/build/pre.sh
 # get deps, build, bundle
 RUN npm i
+RUN ./src/build/pre.sh
 # webpack externalizes native modules (@riaskov/mmap-io via ignoramous fork)
 RUN npm run build:fly
 # or RUN npx webpack --config webpack.fly.cjs
@@ -22,6 +25,8 @@ ENV NODE_ENV production
 ENV NODE_OPTIONS="--max-old-space-size=200 --heapsnapshot-signal=SIGUSR2"
 # get working dir in order
 WORKDIR /app
+# install native compilation tools for node-gyp
+RUN apk add --no-cache python3 make g++ git
 # external deps not bundled by webpack
 RUN npm i @riaskov/mmap-io@github:ignoramous/mmap-io#7f0925b989eac749ced440e51e616dfff4873ecd
 

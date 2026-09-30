@@ -1,25 +1,34 @@
-app = ""
+app = "rethink-dns-glxu"
+primary_region = "nrt"
 
 kill_signal = "SIGINT"
 kill_timeout = "15s"
-# swap cannot be used with "suspend"
-# community.fly.io/t/20672
+# swap must be disabled when using "suspend"
 # swap_size_mb = 152
 
 [build]
   dockerfile = "node.Dockerfile"
 
-[experimental]
-  auto_rollback = true
-
 [env]
+  # offload TLS on to fly-proxy;
+  # tls-tls_options for [[services]] must be set
+  TLS_OFFLOAD = "true"
   CLOUD_PLATFORM = "fly"
   BUN_ENV = "production"
   DENO_ENV = "production"
   NODE_ENV = "production"
   LOG_LEVEL = "info"
-  # in weeks
-  AUTO_RENEW_BLOCKLISTS_OLDER_THAN = "2"
+  CACHE_TTL = "300"
+  TCP_BACKLOG = "1024"
+  MAXCONNS = "2000"
+  NODE_OPTIONS = "--max-old-space-size=200 --no-warnings"
+  CF_DNS_RESOLVER_URL = "https://cloudflare-dns.com/dns-query"
+  CF_DNS_RESOLVER_URL_2 = "https://dns.google/dns-query"
+  DNS_UPSTREAM_IPS = "1.1.1.1,8.8.8.8,2606:4700:4700::1111,2001:4860:4860::8888,fdaa::3"
+
+
+[experimental]
+auto_rollback = true
 
 # community.fly.io/t/19180
 # fly.io/docs/machines/guides-examples/machine-restart-policy
@@ -27,23 +36,28 @@ kill_timeout = "15s"
   policy = "on-failure"
   retries = 3
 
-# DNS over HTTPS
+# DNS over HTTPS (well, h2c and http1.1)
 [[services]]
+  internal_port = 8055
   protocol = "tcp"
-  internal_port = 8080
-  auto_stop_machines = "suspend"
+  # community.fly.io/t/20672
+  auto_stop_machines = false
   auto_start_machines = true
 
-  [[services.ports]]
-    # TODO: ProxyProto v2
-    port = 443
-  [[services.ports]]
-    port = 8080
-
   [services.concurrency]
-    type = "connections"
-    hard_limit = 775
-    soft_limit = 600
+  hard_limit = 2000
+  soft_limit = 1600
+  type = "connections"
+
+  [[services.ports]]
+  handlers = ["tls"]
+  tls_options = { alpn = ["h2", "http/1.1"] }
+  port = 443
+
+  [[services.ports]]
+  handlers = ["tls"]
+  tls_options = { alpn = ["h2", "http/1.1"] }
+  port = 8055
 
   [[services.tcp_checks]]
     # super aggressive interval and timeout because
@@ -53,26 +67,30 @@ kill_timeout = "15s"
     interval = "5s"
     timeout = "1s"
     grace_period = "15s"
-    # restart_limit not used on appsv2
+    # restart_limit is unused in appsv2
     restart_limit = 0
 
-# DNS over TLS
+# DNS over TCP/TLS
 [[services]]
+  internal_port = 10555
   protocol = "tcp"
-  internal_port = 10000
-  auto_stop_machines = "suspend"
+  auto_stop_machines = false
   auto_start_machines = true
 
-  [[services.ports]]
-    # TODO: ProxyProto v2
-    port = 853
-  [[services.ports]]
-    port = 10000
-
   [services.concurrency]
-    type = "connections"
-    hard_limit = 775
-    soft_limit = 600
+  hard_limit = 2000
+  soft_limit = 1600
+  type = "connections"
+
+  [[services.ports]]
+  # TODO: ProxyProto v2
+  handlers = ["tls"]
+  port = 853
+
+  [[services.ports]]
+  # TODO: ProxyProto v2
+  handlers = ["tls"]
+  port = 10555
 
   [[services.tcp_checks]]
     # super aggressive interval and timeout because
@@ -96,3 +114,4 @@ kill_timeout = "15s"
     port = 8888
     timeout = "2s"
     type = "http"
+
